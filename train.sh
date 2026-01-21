@@ -11,3 +11,4 @@ python -m graphphysics.train \
             --use_previous_data \
             --previous_data_start 4 \
             --previous_data_end 7 \
+            --nb_iterations 5\

@@ -92,6 +92,7 @@ def main(argv):
     use_previous_data = FLAGS.use_previous_data
     previous_data_start = FLAGS.previous_data_start
     previous_data_end = FLAGS.previous_data_end
+    nb_iterations = FLAGS.nb_iterations if "nb_iterations" in FLAGS else 1
 
     seed_everything(FLAGS.seed, workers=True)
 
@@ -195,6 +196,7 @@ def main(argv):
             warmup=warmup,
             trajectory_length=train_dataset.trajectory_length,
             timestep=train_dataset.dt,
+            nb_iterations=nb_iterations,
             **prev_data_kwargs,
         )
 

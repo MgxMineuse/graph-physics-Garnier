@@ -44,6 +44,7 @@ class LightningModule(L.LightningModule):
         previous_data_start: int = None,
         previous_data_end: int = None,
         prediction_save_path: str = "predictions",
+        nb_iterations: int = 1,
     ):
         """
         Initializes the LightningModule.
@@ -68,7 +69,9 @@ class LightningModule(L.LightningModule):
         self.param = parameters
         self.wandb_run_id = None
 
-        processor = get_model(param=parameters, only_processor=only_processor)
+        processor = get_model(
+            param=parameters, only_processor=only_processor, nb_iterations=nb_iterations
+        )
 
         print(processor)
 

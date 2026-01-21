@@ -69,7 +69,9 @@ def get_preprocessing(
     )
 
 
-def get_model(param: Dict[str, Any], only_processor: bool = False):
+def get_model(
+    param: Dict[str, Any], only_processor: bool = False, nb_iterations: int = 1
+):
     """
     Constructs the model based on provided parameters.
 
@@ -94,6 +96,7 @@ def get_model(param: Dict[str, Any], only_processor: bool = False):
             output_size=param["model"]["output_size"],
             hidden_size=param["model"]["hidden_size"],
             only_processor=only_processor,
+            nb_iterations=nb_iterations,
         )
     else:
         raise ValueError(f"Model type '{model_type}' not supported.")

@@ -26,6 +26,7 @@ class EncodeProcessDecode(nn.Module):
         output_size: int,
         hidden_size: int = 128,
         only_processor: bool = False,
+        nb_iterations: int = 1,
     ):
         """
         Initializes the EncodeProcessDecode model.
@@ -43,6 +44,7 @@ class EncodeProcessDecode(nn.Module):
         self.only_processor = only_processor
         self.hidden_size = hidden_size
         self.d = output_size
+        self.nb_iterations = nb_iterations
 
         if not self.only_processor:
             self.nodes_encoder = build_mlp(
@@ -87,8 +89,9 @@ class EncodeProcessDecode(nn.Module):
             x = self.nodes_encoder(graph.x)
             edge_attr = self.edges_encoder(graph.edge_attr)
 
-        for block in self.processor_list:
-            x, edge_attr = block(x, edge_index, edge_attr)
+        for _ in range(self.nb_iterations):
+            for block in self.processor_list:
+                x, edge_attr = block(x, edge_index, edge_attr)
 
         if self.only_processor:
             return x

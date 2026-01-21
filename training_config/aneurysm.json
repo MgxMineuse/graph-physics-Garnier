@@ -7,7 +7,7 @@
     },
     "model": {
         "type": "epd",
-        "message_passing_num": 10,
+        "message_passing_num": 2,
         "hidden_size": 64,
         "node_input_size": 13,
         "output_size": 3,
