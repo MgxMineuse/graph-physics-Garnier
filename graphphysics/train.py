@@ -46,7 +46,7 @@ flags.DEFINE_bool(
     "resume_training", False, "Whether to resume an unfinished training or not"
 )
 
-flags.DEFINE_bool("use_previous_data", True, "Whether to use previous data or not")
+flags.DEFINE_bool("use_previous_data", False, "Whether to use previous data or not")
 flags.DEFINE_integer(
     "previous_data_start", 4, "Index of the start of the previous data in the features"
 )
@@ -101,7 +101,7 @@ def main(argv):
         param=parameters,
         device=device,
         use_edge_feature=use_edge_feature,
-        extra_node_features=build_features,
+        # extra_node_features=build_features,
     )
 
     # Get training and validation datasets
@@ -117,7 +117,7 @@ def main(argv):
         device=device,
         use_edge_feature=use_edge_feature,
         remove_noise=True,
-        extra_node_features=build_features,
+        # extra_node_features=build_features,
     )
 
     val_dataset = get_dataset(

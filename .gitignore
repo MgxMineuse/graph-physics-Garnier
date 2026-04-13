@@ -2,9 +2,14 @@
 __pycache__/
 
 dataset/
+data_deepmind/
 checkpoints/
+meshes/
 predictions/
+runs/
 wandb/
 
 copy.sh
 job.sh
+run.ipynb
+script.sh

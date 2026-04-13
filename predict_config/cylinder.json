@@ -1,0 +1,25 @@
+{
+    "dataset": {
+        "extension": "xdmf",
+        "xdmf_folder": "dataset/predict",
+        "meta_path": "dataset_config/cylinder_meta.json",
+        "targets": [
+            "Vitesse"
+        ]
+    },
+    "model": {
+        "type": "epd",
+        "message_passing_num": 2,
+        "hidden_size": 64,
+        "node_input_size": 2,
+        "output_size": 2,
+        "edge_input_size": 3
+    },
+    "index": {
+        "feature_index_start": 0,
+        "feature_index_end": 2,
+        "output_index_start": 0,
+        "output_index_end": 2,
+        "node_type_index": 2
+    }
+}
