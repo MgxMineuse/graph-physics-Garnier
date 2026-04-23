@@ -123,6 +123,7 @@ class LightningModule(L.LightningModule):
             network_output=network_output,
             node_type=node_type,
             masks=self.loss_masks,
+            batch = batch
         )
 
         self.log(
@@ -240,6 +241,7 @@ class LightningModule(L.LightningModule):
             predicted_outputs,
             node_type,
             masks=self.loss_masks,
+            batch = batch
         )
         self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True)
 
