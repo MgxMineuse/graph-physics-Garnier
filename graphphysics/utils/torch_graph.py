@@ -36,16 +36,10 @@ def meshdata_to_graph(
         if any(data.ndim > 1 for data in point_data.values()):
             # if any(data.shape[1] > 1 for data in point_data.values()):
 
-            ordered_keys = ["velocity", "node_type"]
-
             node_features = np.hstack(
-                [point_data[k] for k in ordered_keys]
+                [data for data in point_data.values()]
                 + [np.full((len(points),), time).reshape((-1, 1))]
             )
-            # node_features = np.hstack(
-            #     [data for data in point_data.values()]
-            #     + [np.full((len(points),), time).reshape((-1, 1))]
-            # )
             node_features = torch.tensor(node_features, dtype=torch.float32)
         else:
             node_features = np.vstack(

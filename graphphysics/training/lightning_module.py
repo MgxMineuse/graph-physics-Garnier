@@ -294,7 +294,7 @@ class LightningModule(L.LightningModule):
                 self.current_val_trajectory,
                 prefix=f"graph_epoch_{self.current_epoch}",
             ),
-            timestep=self.timestep,
+            timestep=self.timestep*100,
         )
 
         # Clear stored outputs

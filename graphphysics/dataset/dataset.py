@@ -37,6 +37,7 @@ class BaseDataset(Dataset, ABC):
 
         self.trajectory_length: int = self.meta["trajectory_length"]
         self.num_trajectories: Optional[int] = None
+        self.num_samples_per_traj = self.trajectory_length - 1 - int(use_previous_data)
 
         self.preprocessing = preprocessing
         self.masking_ratio = masking_ratio
@@ -69,12 +70,13 @@ class BaseDataset(Dataset, ABC):
         Returns:
             Tuple[int, int]: A tuple containing the trajectory number and the frame number within that trajectory.
         """
-        traj = index // (self.trajectory_length - 1)
-        frame = index % (self.trajectory_length - 1) + int(self.use_previous_data)
+
+        traj = index // self.num_samples_per_traj
+        frame = index % self.num_samples_per_traj + int(self.use_previous_data)
         return traj, frame
 
     def __len__(self) -> int:
-        return self.size_dataset * (self.trajectory_length - 1)
+        return self.size_dataset * (self.num_samples_per_traj)
 
     @abstractmethod
     def __getitem__(self, index: int) -> Data:

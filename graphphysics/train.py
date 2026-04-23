@@ -11,7 +11,7 @@ from lightning.pytorch.loggers import WandbLogger
 from loguru import logger
 from torch_geometric.loader import DataLoader
 
-from graphphysics.external.aneurysm import build_features
+from graphphysics.external.cylinder import build_features
 from graphphysics.training.lightning_module import LightningModule
 from graphphysics.training.parse_parameters import (
     get_dataset,
@@ -51,13 +51,13 @@ flags.DEFINE_integer(
     "previous_data_start", 4, "Index of the start of the previous data in the features"
 )
 flags.DEFINE_integer(
-    "previous_data_end", 7, "Index of the end of the previous data in the features"
+    "previous_data_end", 6, "Index of the end of the previous data in the features"
 )
 flags.DEFINE_bool("no_edge_feature", False, "Whether to use edge features")
 flags.DEFINE_string(
     "training_parameters_path", None, "Path to the training parameters JSON file"
 )
-
+flags.DEFINE_integer("nb_iterations", 1, "Number of loops in message_passing layers")
 
 def main(argv):
     del argv
@@ -92,7 +92,7 @@ def main(argv):
     use_previous_data = FLAGS.use_previous_data
     previous_data_start = FLAGS.previous_data_start
     previous_data_end = FLAGS.previous_data_end
-    nb_iterations = FLAGS.nb_iterations if "nb_iterations" in FLAGS else 1
+    nb_iterations = FLAGS.nb_iterations
 
     seed_everything(FLAGS.seed, workers=True)
 
@@ -101,7 +101,7 @@ def main(argv):
         param=parameters,
         device=device,
         use_edge_feature=use_edge_feature,
-        # extra_node_features=build_features,
+        extra_node_features=build_features,
     )
 
     # Get training and validation datasets
@@ -117,7 +117,7 @@ def main(argv):
         device=device,
         use_edge_feature=use_edge_feature,
         remove_noise=True,
-        # extra_node_features=build_features,
+        extra_node_features=build_features,
     )
 
     val_dataset = get_dataset(

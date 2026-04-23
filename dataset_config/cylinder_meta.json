@@ -36,13 +36,23 @@
         2
       ],
       "dtype": "float32"
+    },
+    "pressure":{
+      "type":"dynamic",
+      "shape": [
+        600, 
+        -1,
+        1
+      ],
+      "dtype":"float32"
     }
   },
   "field_names": [
     "cells",
     "mesh_pos",
     "velocity",
-    "node_type"
+    "node_type",
+    "pressure"
   ],
   "trajectory_length": 600
 }
