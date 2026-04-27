@@ -12,7 +12,7 @@ from graphphysics.training.parse_parameters import (
     get_model,
     get_simulator,
 )
-from graphphysics.utils.loss import L2Loss
+from graphphysics.utils.loss import L2Loss, L2Loss_physic
 from graphphysics.utils.meshio_mesh import convert_to_meshio_vtu
 from graphphysics.utils.nodetype import NodeType
 from graphphysics.utils.scheduler import CosineWarmupScheduler

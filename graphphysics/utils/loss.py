@@ -8,23 +8,23 @@ from graphphysics.utils.nodetype import NodeType
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def divergence(batch, network_output, mask):
+def divergence(batch, network_output):
     row,col = batch.edge_index
     pos = batch.pos
 
     dx = pos[col]-pos[row]
     du = network_output[col]-network_output[row]
-    du = du
 
-    eps = 1e-8
+    for i in range(dx.shape[0]):
+        for j in range(dx.shape[1]):
+            if dx[i,j]==0:
+                dx[i,j]= 1e-8
 
-    dudx = du[:, 0]/(dx[:, 0]+eps)
-    dudy = du[:, 1]/(dx[:, 1]+eps)
+    dudx = du[:, 0]/(dx[:, 0])
+    dudy = du[:, 1]/(dx[:, 1])
 
     div_edge = dudx + dudy
-    div_node = torch.zeros_like(pos[:, 0])
-    div_node = div_node.index_add(0, row, div_edge)
-    return torch.mean(div_node[mask]**2)
+    return torch.mean(torch.abs(div_edge))
 
 def _prepare_mask_for_loss(
     network_output: torch.Tensor,
@@ -50,7 +50,7 @@ class L2Loss_physic(_Loss):
 
     @property
     def __name__(self):
-        return "MSE"
+        return "MSE and physics"
 
     def forward(
         self,
@@ -74,18 +74,14 @@ class L2Loss_physic(_Loss):
 
         Returns:
             torch.Tensor: The mean squared error for the specified node types.
-
-        Note:
-            This method calculates the L2 loss only for nodes of the types specified in 'masks'.
-            If 'selected_indexes' is provided, those nodes are excluded from the loss calculation.
         """
         mask = _prepare_mask_for_loss(
             network_output, node_type, masks, selected_indexes
         )
         errors = ((network_output - target) ** 2)[mask]
 
-        lambda_loss = 2e-3
-        physic_loss = divergence(batch, network_output, mask)
+        lambda_loss = 1e-4
+        physic_loss = divergence(batch, network_output)
 
         return torch.mean(errors) + lambda_loss*physic_loss
 
