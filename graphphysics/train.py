@@ -59,6 +59,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_integer("nb_iterations", 1, "Number of loops in message_passing layers")
 
+
 def main(argv):
     del argv
 

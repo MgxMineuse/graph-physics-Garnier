@@ -23,7 +23,10 @@ def build_features(graph: Data) -> Data:
                 acceleration,
                 last_pressure,
                 node_type.to(device).unsqueeze(1),
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
             ),
             dim=1,
         )

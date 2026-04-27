@@ -70,7 +70,6 @@ class BaseDataset(Dataset, ABC):
         Returns:
             Tuple[int, int]: A tuple containing the trajectory number and the frame number within that trajectory.
         """
-
         traj = index // self.num_samples_per_traj
         frame = index % self.num_samples_per_traj + int(self.use_previous_data)
         return traj, frame

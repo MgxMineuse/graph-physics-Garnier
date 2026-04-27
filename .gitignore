@@ -1,7 +1,6 @@
 .vscode/
 __pycache__/
 
-./dataset/
 data_deepmind/
 checkpoints/
 meshes/
@@ -11,5 +10,5 @@ wandb/
 
 copy.sh
 job.sh
-run.ipynb
+run*.ipynb
 script.sh
