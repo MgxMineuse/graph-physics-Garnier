@@ -1,7 +1,7 @@
 import torch
 from torch_geometric.data import Data
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def build_features(graph: Data) -> Data:
@@ -10,9 +10,9 @@ def build_features(graph: Data) -> Data:
     pressure = graph.x[:, 3]
     current_velocity = graph.x[:, 1:3]
     if "previous_data" in graph:
-        previous_velocity = torch.tensor(graph.previous_data["velocity"], device=device)
+        previous_velocity = torch.tensor(graph.previous_data["velocity"])
         acceleration = current_velocity - previous_velocity
-        last_pressure = torch.tensor(graph.previous_data["pressure"], device=device)
+        last_pressure = torch.tensor(graph.previous_data["pressure"])
 
         graph.x = torch.cat(
             (
@@ -22,11 +22,7 @@ def build_features(graph: Data) -> Data:
                 graph.pos,
                 acceleration,
                 last_pressure,
-                node_type.to(device).unsqueeze(1),
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
+                node_type.unsqueeze(1),
             ),
             dim=1,
         )
@@ -37,7 +33,7 @@ def build_features(graph: Data) -> Data:
                 pressure.unsqueeze(1),
                 timestep.unsqueeze(1),
                 graph.pos,
-                node_type.to(device).unsqueeze(1),
+                node_type.unsqueeze(1),
             ),
             dim=1,
         )

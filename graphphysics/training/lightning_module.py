@@ -5,6 +5,7 @@ from typing import List
 import lightning as L
 import meshio
 import torch
+import torch.distributed as dist
 from loguru import logger
 from torch_geometric.data import Batch
 
@@ -64,8 +65,6 @@ class LightningModule(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
         self.param = parameters
         self.wandb_run_id = None
 
@@ -75,7 +74,7 @@ class LightningModule(L.LightningModule):
 
         print(processor)
 
-        self.model = get_simulator(param=parameters, model=processor, device=device)
+        self.model = get_simulator(param=parameters, model=processor, device=None)
 
         self.loss = L2Loss()
 
@@ -123,7 +122,7 @@ class LightningModule(L.LightningModule):
             network_output=network_output,
             node_type=node_type,
             masks=self.loss_masks,
-            batch = batch
+            batch=batch,
         )
 
         self.log(
@@ -132,6 +131,7 @@ class LightningModule(L.LightningModule):
             on_step=True,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
         )
         return loss
 
@@ -215,42 +215,49 @@ class LightningModule(L.LightningModule):
 
     def validation_step(self, batch: Batch, batch_idx: int):
         batch = batch.to(self.device, non_blocking=True)
-        # Determine if we need to reset the trajectory
-        if batch.traj_index > self.current_val_trajectory:
-            self._reset_validation_trajectory()
-            self.step_counter = 0
-
-        (
-            batch,
-            predicted_outputs,
-            target,
-            self.last_val_prediction,
-            self.last_previous_data_prediction,
-        ) = self._make_prediction(
-            batch, self.last_val_prediction, self.last_previous_data_prediction
+        print(
+            f"Rank {self.global_rank}: batch_idx={batch_idx}, batch_size={len(batch)}"
         )
+        if self.global_rank == 0:
+            # Determine if we need to reset the trajectory
+            if batch.traj_index > self.current_val_trajectory:
+                self._reset_validation_trajectory()
+                self.step_counter = 0
 
-        if self.current_val_trajectory == 0:
-            self.trajectory_to_save.append(batch)
-        node_type = batch.x[:, self.model.node_type_index]
+            (
+                batch,
+                predicted_outputs,
+                target,
+                self.last_val_prediction,
+                self.last_previous_data_prediction,
+            ) = self._make_prediction(
+                batch, self.last_val_prediction, self.last_previous_data_prediction
+            )
 
-        self.val_step_outputs.append(predicted_outputs.cpu())
-        self.val_step_targets.append(target.cpu())
-        val_loss = self.loss(
-            target,
-            predicted_outputs,
-            node_type,
-            masks=self.loss_masks,
-            batch = batch
-        )
-        self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True)
+            if self.current_val_trajectory == 0:
+                self.trajectory_to_save.append(batch)
+            node_type = batch.x[:, self.model.node_type_index]
 
-        # compute RMSE for the first step
-        if self.step_counter == 0:
-            squared_diff = (predicted_outputs - target) ** 2
-            rmse = torch.sqrt(squared_diff.mean()).detach().cpu()
-            self.first_step_losses.append(rmse)
-        self.step_counter += 1
+            self.val_step_outputs.append(predicted_outputs.cpu())
+            self.val_step_targets.append(target.cpu())
+            val_loss = self.loss(
+                target, predicted_outputs, node_type, masks=self.loss_masks, batch=batch
+            )
+            self.log(
+                "val_loss",
+                val_loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
+            )
+
+            # compute RMSE for the first step
+            if self.step_counter == 0:
+                squared_diff = (predicted_outputs - target) ** 2
+                rmse = torch.sqrt(squared_diff.mean()).detach().cpu()
+                self.first_step_losses.append(rmse)
+            self.step_counter += 1
 
     def _reset_validation_epoch_end(self):
         self.val_step_outputs.clear()
@@ -287,17 +294,18 @@ class LightningModule(L.LightningModule):
             )
 
         # Save trajectory graphs
-        save_dir = os.path.join("meshes", f"epoch_{self.current_epoch}")
-        self._save_trajectory_to_xdmf(
-            self.trajectory_to_save,
-            save_dir,
-            self._get_traj_savename(
+        if self.global_rank == 0:
+            save_dir = os.path.join("meshes", f"epoch_{self.current_epoch}")
+            self._save_trajectory_to_xdmf(
                 self.trajectory_to_save,
-                self.current_val_trajectory,
-                prefix=f"graph_epoch_{self.current_epoch}",
-            ),
-            timestep=self.timestep * 100,
-        )
+                save_dir,
+                self._get_traj_savename(
+                    self.trajectory_to_save,
+                    self.current_val_trajectory,
+                    prefix=f"graph_epoch_{self.current_epoch}",
+                ),
+                timestep=self.timestep * 100,
+            )
 
         # Clear stored outputs
         self._reset_validation_epoch_end()

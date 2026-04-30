@@ -213,23 +213,40 @@ class Normalizer(nn.Module):
         """
         super().__init__()
         self.name = name
-        self.device = device
+        # self.device = device
         self._max_accumulations = max_accumulations
-        self._std_epsilon = torch.tensor(
-            std_epsilon, dtype=torch.float32, requires_grad=False, device=device
+        self.std_epsilon = torch.tensor(
+            std_epsilon,
+            dtype=torch.float32,
+            requires_grad=False,
         )
-        self.register_buffer("_acc_count", torch.tensor(0.0, device=device))
-        self.register_buffer("_num_accumulations", torch.tensor(0.0, device=device))
+        self.register_buffer("_std_epsilon", self.std_epsilon)
+        self.register_buffer(
+            "_acc_count",
+            torch.tensor(
+                0.0,
+            ),
+        )
+        self.register_buffer(
+            "_num_accumulations",
+            torch.tensor(
+                0.0,
+            ),
+        )
         self.register_buffer(
             "_acc_sum",
             torch.zeros(
-                (1, size), dtype=torch.float32, requires_grad=False, device=device
+                (1, size),
+                dtype=torch.float32,
+                requires_grad=False,
             ),
         )
         self.register_buffer(
             "_acc_sum_squared",
             torch.zeros(
-                (1, size), dtype=torch.float32, requires_grad=False, device=device
+                (1, size),
+                dtype=torch.float32,
+                requires_grad=False,
             ),
         )
 
@@ -282,15 +299,11 @@ class Normalizer(nn.Module):
         self._num_accumulations += 1
 
     def _mean(self) -> torch.Tensor:
-        safe_count = torch.max(
-            self._acc_count, torch.tensor(1.0, device=self._acc_count.device)
-        )
+        safe_count = torch.max(self._acc_count, torch.tensor(1.0))
         return self._acc_sum / safe_count
 
     def _std_with_epsilon(self) -> torch.Tensor:
-        safe_count = torch.max(
-            self._acc_count, torch.tensor(1.0, device=self._acc_count.device)
-        )
+        safe_count = torch.max(self._acc_count, torch.tensor(1.0))
         variance = self._acc_sum_squared / safe_count - self._mean() ** 2
         std = torch.sqrt(torch.clamp(variance, min=0.0))
         return torch.max(std, self._std_epsilon)

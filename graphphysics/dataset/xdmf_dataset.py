@@ -34,7 +34,7 @@ class XDMFDataset(BaseDataset):
             add_edge_features=add_edge_features,
             use_previous_data=use_previous_data,
         )
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.type = "xdmf"
 
         self.dt = self.meta["dt"]
@@ -60,7 +60,7 @@ class XDMFDataset(BaseDataset):
             for f in os.listdir(xdmf_folder)
             if os.path.isfile(os.path.join(xdmf_folder, f)) and f.endswith(".xdmf")
         ]
-        self.file_paths = self.file_paths[:20]
+        self.file_paths = self.file_paths[:100]
         self._size_dataset: int = len(self.file_paths)
 
     @property
@@ -193,7 +193,7 @@ class XDMFDataset(BaseDataset):
             graph.previous_data = previous
             graph.previous_dt = -_previous_data_index * self.dt
 
-        graph = graph.to(self.device)
+        # graph = graph.to(self.device)
 
         graph = self._apply_preprocessing(graph)
         graph = self._may_remove_edges_attr(graph)

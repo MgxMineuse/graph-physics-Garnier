@@ -202,47 +202,65 @@ def main(argv):
         )
 
     # Initialize WandbLogger
-    if resume_training:
-        wandb_run = wandb.init(
-            project=wandb_project_name, id=lightning_module.wandb_run_id, resume="allow"
-        )
-    else:
-        wandb_run = wandb.init(project=wandb_project_name)
+    # if resume_training:
+    #     wandb_run = wandb.init(
+    #         project=wandb_project_name, id=lightning_module.wandb_run_id, resume="allow"
+    #     )
+    # else:
+    #     wandb_run = wandb.init(project=wandb_project_name)
 
-    wandb_logger = WandbLogger(experiment=wandb_run)
-    lightning_module.wandb_run_id = wandb_logger.experiment.id
-    if model_save_name is not None:
-        checkpoint_callback = ModelCheckpoint(
-            dirpath="checkpoints/", filename=model_save_name
-        )
-    else:
-        checkpoint_callback = ModelCheckpoint(dirpath="checkpoints")
+    # wandb_logger = WandbLogger(experiment=wandb_run)
+    # lightning_module.wandb_run_id = wandb_logger.experiment.id
+    # if model_save_name is not None:
+    #     checkpoint_callback = ModelCheckpoint(
+    #         dirpath="checkpoints/", filename=model_save_name
+    #     )
+    # else:
+    #     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints")
+
+    wandb_logger = WandbLogger(
+        project=wandb_project_name,
+        id=lightning_module.wandb_run_id if resume_training else None,
+        resume="allow" if resume_training else None,
+    )
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
-    wandb_logger.experiment.config.update(
-        {
-            "architecture": parameters["model"]["type"],
-            "#_layers": parameters["model"]["message_passing_num"],
-            "#_neurons": parameters["model"]["hidden_size"],
-            "max_lr": initial_lr,
-            "batch_size": batch_size,
-        }
-    )
+    # wandb_logger.experiment.config.update(
+    #     {
+    #         "architecture": parameters["model"]["type"],
+    #         "#_layers": parameters["model"]["message_passing_num"],
+    #         "#_neurons": parameters["model"]["hidden_size"],
+    #         "max_lr": initial_lr,
+    #         "batch_size": batch_size,
+    #     }
+    # )
 
     # Configure Trainer
     trainer = Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1,
+        devices=2,
+        strategy="ddp",
         max_epochs=num_epochs,
         logger=wandb_logger,
         callbacks=[
             ColabProgressBar(),
-            checkpoint_callback,
+            # checkpoint_callback,
             lr_monitor,
         ],
         log_every_n_steps=100,
         gradient_clip_val=1.0,
     )
+
+    if trainer.global_rank == 0:
+        wandb_logger.experiment.config.update(
+            {
+                "architecture": parameters["model"]["type"],
+                "#_layers": parameters["model"]["message_passing_num"],
+                "#_neurons": parameters["model"]["hidden_size"],
+                "max_lr": initial_lr,
+                "batch_size": batch_size,
+            }
+        )
 
     # Resuming training from a checkpoint
     if model_path and os.path.isfile(model_path) and resume_training:

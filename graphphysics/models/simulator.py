@@ -62,20 +62,14 @@ class Simulator(nn.Module):
         self.output_index_end = output_index_end
 
         self.model_dir = model_dir
-        self.model = model.to(device)
-        self._output_normalizer = Normalizer(
-            size=output_size, name="output_normalizer", device=device
-        )
-        self._node_normalizer = Normalizer(
-            size=node_input_size, name="node_normalizer", device=device
-        )
+        self.model = model
+        self._output_normalizer = Normalizer(size=output_size, name="output_normalizer")
+        self._node_normalizer = Normalizer(size=node_input_size, name="node_normalizer")
         self._edge_normalizer = (
-            Normalizer(size=edge_input_size, name="edge_normalizer", device=device)
+            Normalizer(size=edge_input_size, name="edge_normalizer")
             if self.edge_input_size is not None
             else None
         )
-
-        self.device = device
 
     def _get_pre_target(self, inputs: Data) -> torch.Tensor:
         """

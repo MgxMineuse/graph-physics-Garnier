@@ -4,27 +4,27 @@ from torch_geometric.data import Batch
 
 from graphphysics.utils.nodetype import NodeType
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def divergence(batch, network_output):
-    row,col = batch.edge_index
+    row, col = batch.edge_index
     pos = batch.pos
 
-    dx = pos[col]-pos[row]
-    du = network_output[col]-network_output[row]
+    dx = pos[col] - pos[row]
+    du = network_output[col] - network_output[row]
 
     for i in range(dx.shape[0]):
         for j in range(dx.shape[1]):
-            if dx[i,j]==0:
-                dx[i,j]= 1e-8
+            if dx[i, j] == 0:
+                dx[i, j] = 1e-8
 
-    dudx = du[:, 0]/(dx[:, 0])
-    dudy = du[:, 1]/(dx[:, 1])
+    dudx = du[:, 0] / (dx[:, 0])
+    dudy = du[:, 1] / (dx[:, 1])
 
     div_edge = dudx + dudy
     return torch.mean(torch.abs(div_edge))
+
 
 def _prepare_mask_for_loss(
     network_output: torch.Tensor,
@@ -38,7 +38,7 @@ def _prepare_mask_for_loss(
 
     if selected_indexes is not None:
         n, _ = network_output.shape
-        nodes_mask = ~torch.isin(torch.arange(n), selected_indexes).to(device)
+        nodes_mask = ~torch.isin(torch.arange(n), selected_indexes)
         mask = torch.logical_and(nodes_mask, mask)
 
     return mask
@@ -83,7 +83,7 @@ class L2Loss_physic(_Loss):
         lambda_loss = 1e-4
         physic_loss = divergence(batch, network_output)
 
-        return torch.mean(errors) + lambda_loss*physic_loss
+        return torch.mean(errors) + lambda_loss * physic_loss
 
 
 class L2Loss(_Loss):
