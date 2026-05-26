@@ -60,7 +60,11 @@ class XDMFDataset(BaseDataset):
             for f in os.listdir(xdmf_folder)
             if os.path.isfile(os.path.join(xdmf_folder, f)) and f.endswith(".xdmf")
         ]
-        self.file_paths = self.file_paths[:100]
+
+        self.file_paths = self.file_paths[:60]
+        if switch_to_val:
+            self.file_paths = self.file_paths[:20]
+
         self._size_dataset: int = len(self.file_paths)
 
     @property

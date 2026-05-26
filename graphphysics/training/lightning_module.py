@@ -17,6 +17,8 @@ from graphphysics.utils.loss import L2Loss, L2Loss_physic
 from graphphysics.utils.meshio_mesh import convert_to_meshio_vtu
 from graphphysics.utils.nodetype import NodeType
 from graphphysics.utils.scheduler import CosineWarmupScheduler
+from torch.utils.data import SequentialSampler
+from lightning.pytorch.utilities.data import _update_dataloader
 
 
 def build_mask(param: dict, graph: Batch):
@@ -107,6 +109,7 @@ class LightningModule(L.LightningModule):
         self.prediction_trajectory: list[Batch] = []
         self.last_pred_prediction = None
         self.last_previous_data_pred_prediction = None
+        self.rmse_one_step = []
 
     def forward(self, graph: Batch):
         return self.model(graph)
@@ -215,59 +218,71 @@ class LightningModule(L.LightningModule):
 
     def validation_step(self, batch: Batch, batch_idx: int):
         batch = batch.to(self.device, non_blocking=True)
-        print(
-            f"Rank {self.global_rank}: batch_idx={batch_idx}, batch_size={len(batch)}"
+        # Determine if we need to reset the trajectory
+        if batch.traj_index > self.current_val_trajectory:
+            self._reset_validation_trajectory()
+            self.step_counter = 0
+
+        (
+            batch,
+            predicted_outputs,
+            target,
+            self.last_val_prediction,
+            self.last_previous_data_prediction,
+        ) = self._make_prediction(
+            batch, self.last_val_prediction, self.last_previous_data_prediction
         )
-        if self.global_rank == 0:
-            # Determine if we need to reset the trajectory
-            if batch.traj_index > self.current_val_trajectory:
-                self._reset_validation_trajectory()
-                self.step_counter = 0
 
-            (
-                batch,
-                predicted_outputs,
-                target,
-                self.last_val_prediction,
-                self.last_previous_data_prediction,
-            ) = self._make_prediction(
-                batch, self.last_val_prediction, self.last_previous_data_prediction
-            )
+        if self.global_rank == 0 and self.current_val_trajectory == 0:
+            self.trajectory_to_save.append(batch)
+        node_type = batch.x[:, self.model.node_type_index]
 
-            if self.current_val_trajectory == 0:
-                self.trajectory_to_save.append(batch)
-            node_type = batch.x[:, self.model.node_type_index]
+        self.val_step_outputs.append(predicted_outputs.cpu())
+        self.val_step_targets.append(target.cpu())
 
-            self.val_step_outputs.append(predicted_outputs.cpu())
-            self.val_step_targets.append(target.cpu())
-            val_loss = self.loss(
-                target, predicted_outputs, node_type, masks=self.loss_masks, batch=batch
-            )
-            self.log(
-                "val_loss",
-                val_loss,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=True,
-                sync_dist=True,
-            )
+        val_loss = self.loss(
+            target, predicted_outputs, node_type, masks=self.loss_masks, batch=batch
+        )
+        self.log(
+            "val_loss",
+            val_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
 
-            # compute RMSE for the first step
-            if self.step_counter == 0:
-                squared_diff = (predicted_outputs - target) ** 2
-                rmse = torch.sqrt(squared_diff.mean()).detach().cpu()
-                self.first_step_losses.append(rmse)
-            self.step_counter += 1
+        # compute RMSE for the first step
+        if self.step_counter == 0:
+            squared_diff = (predicted_outputs - target) ** 2
+            rmse = torch.sqrt(squared_diff.mean()).detach().cpu()
+            self.first_step_losses.append(rmse)
+
+            # rmse_vitesse = torch.sqrt(squared_diff[:, :2].mean()).detach().cpu()
+            # rmse_pression = torch.sqrt(squared_diff[:, 2].mean()).detach().cpu()
+            # self.rmse_one_step.append(torch.tensor([rmse_vitesse, rmse_pression]))
+
+        self.step_counter += 1
 
     def _reset_validation_epoch_end(self):
-        self.val_step_outputs.clear()
-        self.val_step_targets.clear()
+        self.val_step_outputs = []
+        self.val_step_targets = []
         self.current_val_trajectory = 0
         self.last_val_prediction = None
         self.last_previous_data_prediction = None
         self.trajectory_to_save.clear()
         self.step_counter = 0
         self.first_step_losses = []
+        self.rmse_one_step = []
+
+    def on_validation_start(self):
+        ### Moyen, trop dépendant de la version de pytorch lightning
+        dataloaders = []
+        for dl in self.trainer._evaluation_loop._combined_loader.flattened:
+            sampler = SequentialSampler(dl)
+            dl = _update_dataloader(dl, sampler=sampler, mode=self.trainer.state.status)
+            dataloaders.append(dl)
+        self.trainer._evaluation_loop._combined_loader.flattened = dataloaders
 
     def on_validation_epoch_end(self):
         # Concatenate outputs and targets
@@ -278,23 +293,50 @@ class LightningModule(L.LightningModule):
         squared_diff = (predicteds - targets) ** 2
         all_rollout_rmse = torch.sqrt(squared_diff.mean()).item()
 
+        # rmse_vitesse = torch.sqrt(squared_diff[:, :2].mean()).item()
+        # rmse_presssion = torch.sqrt(squared_diff[:, 2].mean()).item()
+        # print(
+        #     "Global rank",
+        #     self.global_rank,
+        #     "RMSE rollout vitesse:",
+        #     rmse_vitesse,
+        #     " RMSE rollout pression:",
+        #     rmse_presssion,
+        # )
+
         self.log(
             "val_all_rollout_rmse",
             all_rollout_rmse,
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
         )
 
         # Compute RMSE for the first step
         if self.first_step_losses:
             mean_first_step_loss = torch.stack(self.first_step_losses).mean().item()
             self.log(
-                "val_1step_rmse", mean_first_step_loss, on_epoch=True, prog_bar=True
+                "val_1step_rmse",
+                mean_first_step_loss,
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
             )
 
-        # Save trajectory graphs
+            # rmse_V_one_step = torch.stack(self.rmse_one_step)[:, 0].mean().item()
+            # rmse_P_one_step = torch.stack(self.rmse_one_step)[:, 1].mean().item()
+            # print(
+            #     "Global rank",
+            #     self.global_rank,
+            #     "RMSE one step vitesse:",
+            #     rmse_V_one_step,
+            #     " RMSE one step pression:",
+            #     rmse_P_one_step,
+            # )
+
         if self.global_rank == 0:
+            # Save trajectory graphs
             save_dir = os.path.join("meshes", f"epoch_{self.current_epoch}")
             self._save_trajectory_to_xdmf(
                 self.trajectory_to_save,
@@ -306,6 +348,8 @@ class LightningModule(L.LightningModule):
                 ),
                 timestep=self.timestep * 100,
             )
+
+        self.trainer.strategy.barrier()
 
         # Clear stored outputs
         self._reset_validation_epoch_end()
