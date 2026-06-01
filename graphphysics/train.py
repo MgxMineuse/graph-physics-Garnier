@@ -10,6 +10,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from loguru import logger
 from torch_geometric.loader import DataLoader
+from graphphysics.dataset.trajectoireDataset import TrajectoryDataLoader
 
 from graphphysics.external.cylinder import build_features
 from graphphysics.training.lightning_module import LightningModule
@@ -198,6 +199,7 @@ def main(argv):
             trajectory_length=train_dataset.trajectory_length,
             timestep=train_dataset.dt,
             nb_iterations=nb_iterations,
+            k_param=6,  # facteur pour le decay de la probabilité du scheduled sampling
             **prev_data_kwargs,
         )
 
@@ -225,21 +227,11 @@ def main(argv):
     )
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
-    # wandb_logger.experiment.config.update(
-    #     {
-    #         "architecture": parameters["model"]["type"],
-    #         "#_layers": parameters["model"]["message_passing_num"],
-    #         "#_neurons": parameters["model"]["hidden_size"],
-    #         "max_lr": initial_lr,
-    #         "batch_size": batch_size,
-    #     }
-    # )
-
     # Configure Trainer
     trainer = Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=2,
-        strategy="ddp",
+        devices=1,
+        # strategy="ddp",
         max_epochs=num_epochs,
         logger=wandb_logger,
         callbacks=[

@@ -5,7 +5,7 @@ from typing import List
 import lightning as L
 import meshio
 import torch
-import torch.distributed as dist
+import numpy as np
 from loguru import logger
 from torch_geometric.data import Batch
 
@@ -42,12 +42,18 @@ class LightningModule(L.LightningModule):
         trajectory_length: int = 599,
         timestep: float = 1.0,
         only_processor: bool = False,
-        masks: list[NodeType] = [NodeType.NORMAL, NodeType.OUTFLOW],
+        masks: list[NodeType] = [
+            NodeType.NORMAL,
+            NodeType.OUTFLOW,
+            NodeType.WALL_BOUNDARY,
+        ],
         use_previous_data: bool = False,
         previous_data_start: int = None,
         previous_data_end: int = None,
         prediction_save_path: str = "predictions",
         nb_iterations: int = 1,
+        K: int = 1,
+        k_param: float = 10,
     ):
         """
         Initializes the LightningModule.
@@ -111,8 +117,81 @@ class LightningModule(L.LightningModule):
         self.last_previous_data_pred_prediction = None
         self.rmse_one_step = []
 
+        # scheduled sampling
+        self.K = K
+        self.k_param = k_param
+
     def forward(self, graph: Batch):
         return self.model(graph)
+
+    def parallel_scheduled_sampling(self, list_input):
+        losses = []
+        y_tilde = [g.y.clone() for g in list_input]
+
+        for k in range(self.K + 1):
+            for t in range(len(list_input)):
+                input_graph = input_graph.to(self.device)
+                if t > 0:
+                    input_graph.x[
+                        :, self.model.output_index_start : self.model.output_index_end
+                    ] = y_tilde[t - 1]
+                node_type = input_graph.x[:, self.model.node_type_index]
+
+                with torch.set_grad_enabled(k == self.K):
+                    network_output, target_delta_normalized, _ = self.model(input_graph)
+                    predicted_output = self.model.build_outputs(
+                        input_graph, network_output
+                    )
+
+                mask = build_mask(self.param, input_graph)
+                predicted_output[mask, :2] = input_graph.y[mask, :2]
+
+                if k < self.K:
+                    if t == 0:
+                        y_tilde_new = input_graph.y.clone()
+                    else:
+                        y_tilde_new = (
+                            predicted_output.detach()
+                            if torch.rand(1) > self.p
+                            else input_graph.y.clone()
+                        )
+                    y_tilde[t] = y_tilde_new
+
+                if k == self.K:
+                    loss = self.loss(
+                        graph=input_graph,
+                        target=target_delta_normalized,
+                        network_output=network_output,
+                        node_type=node_type,
+                        masks=self.loss_masks,
+                    )
+                    losses.append(loss)
+
+        return torch.stack(losses)
+
+    def training_step_scheduled(self, batch: Batch):
+        """
+        Implement the scheduled sampling method for training
+        """
+        self.p = self.k_param / (
+            self.k_param + np.exp(self.trainer.current_epoch / self.k_param)
+        )
+        self.p = 0.8
+        losses = []
+        for traj in batch:
+            losses_traj = self.parallel_scheduled_sampling(traj)
+            losses.append(losses_traj)
+
+        loss = torch.stack(losses).mean()
+        self.log(
+            "train_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+        return loss
 
     def training_step(self, batch: Batch):
         batch = batch.to(self.device, non_blocking=True)
@@ -156,7 +235,7 @@ class LightningModule(L.LightningModule):
                 # Write the mesh (points and cells) once
                 writer.write_points_cells(points, cells)
                 # Loop through time steps and write data
-                t = timestep if not self.use_previous_data else 2 * timestep
+                t = timestep if self.use_previous_data else 0
                 for idx, graph in enumerate(trajectory):
                     mesh = convert_to_meshio_vtu(graph, add_all_data=True)
                     point_data = mesh.point_data

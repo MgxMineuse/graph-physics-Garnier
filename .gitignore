@@ -10,5 +10,5 @@ wandb/
 
 copy.sh
 job.sh
-run*.ipynb
+*.ipynb
 script.sh

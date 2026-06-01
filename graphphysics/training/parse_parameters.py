@@ -5,6 +5,7 @@ from torch_geometric.data import Data
 
 from graphphysics.dataset.preprocessing import build_preprocessing
 from graphphysics.dataset.xdmf_dataset import XDMFDataset
+from graphphysics.dataset.trajectoireDataset import TrajectoryXDMFDataset
 from graphphysics.models.processors import (
     EncodeProcessDecode,
 )
@@ -159,18 +160,30 @@ def get_dataset(
     if len(targets) == 0:
         raise ValueError("Please provide a list of target properties to predict.")
     extension = dataset_params.get("extension", "")
-
     if extension == "xdmf":
-        return XDMFDataset(
-            xdmf_folder=dataset_params["xdmf_folder"],
-            meta_path=dataset_params["meta_path"],
-            targets=targets,
-            preprocessing=preprocessing,
-            masking_ratio=masking_ratio,
-            add_edge_features=use_edge_feature,
-            use_previous_data=use_previous_data,
-            switch_to_val=switch_to_val,
-        )
+        if not switch_to_val and False:
+            return TrajectoryXDMFDataset(
+                xdmf_folder=dataset_params["xdmf_folder"],
+                meta_path=dataset_params["meta_path"],
+                targets=targets,
+                preprocessing=preprocessing,
+                masking_ratio=masking_ratio,
+                add_edge_features=use_edge_feature,
+                use_previous_data=use_previous_data,
+                switch_to_val=switch_to_val,
+                chunk_size=5,
+            )
+        else:
+            return XDMFDataset(
+                xdmf_folder=dataset_params["xdmf_folder"],
+                meta_path=dataset_params["meta_path"],
+                targets=targets,
+                preprocessing=preprocessing,
+                masking_ratio=masking_ratio,
+                add_edge_features=use_edge_feature,
+                use_previous_data=use_previous_data,
+                switch_to_val=switch_to_val,
+            )
     else:
         raise ValueError(f"Dataset extension '{extension}' not supported.")
 
