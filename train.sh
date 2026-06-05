@@ -1,13 +1,10 @@
-CUDA_VISIBLE_DEVICES=2,3 python -m graphphysics.train \
+CUDA_VISIBLE_DEVICES=1,2,3 python -m graphphysics.train \
             --project_name=Hybrid_Physics_GNN \
             --training_parameters_path=training_config/cylinder.json \
             --num_epochs=10 \
             --init_lr=0.001 \
-            --batch_size=16 \
+            --batch_size=8 \
             --warmup=500 \
-            --num_workers=16 \
-            --prefetch_factor=8 \
+            --num_workers=2 \
+            --prefetch_factor=2 \
             --nb_iterations=1 \
-            --use_previous_data \
-            --previous_data_start 6 \
-            --previous_data_end 9 \

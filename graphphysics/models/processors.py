@@ -51,12 +51,14 @@ class EncodeProcessDecode(nn.Module):
                 in_size=node_input_size,
                 hidden_size=hidden_size,
                 out_size=hidden_size,
+                nb_of_layers=2,
             )
 
             self.edges_encoder = build_mlp(
                 in_size=edge_input_size,
                 hidden_size=hidden_size,
                 out_size=hidden_size,
+                nb_of_layers=2,
             )
 
             self.decode_module = build_mlp(
@@ -64,10 +66,14 @@ class EncodeProcessDecode(nn.Module):
                 hidden_size=hidden_size,
                 out_size=output_size,
                 layer_norm=False,
+                nb_of_layers=2,
             )
 
         self.processor_list = nn.ModuleList(
-            [GraphNetBlock(hidden_size=hidden_size) for _ in range(message_passing_num)]
+            [
+                GraphNetBlock(hidden_size=hidden_size, nb_of_layers=2)
+                for _ in range(message_passing_num)
+            ]
         )
 
     def forward(self, graph: Data) -> torch.Tensor:

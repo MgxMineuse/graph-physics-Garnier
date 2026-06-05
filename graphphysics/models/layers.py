@@ -102,18 +102,18 @@ def build_mlp(
     activation = ACTIVATION[act]
 
     layers = [nn.Linear(in_size, hidden_size)]
-    if layer_norm:
-        layers.append(nn.LayerNorm(hidden_size))
+    # if layer_norm:
+    #     layers.append(nn.LayerNorm(hidden_size))
     layers.append(activation())
-    layers.extend([nn.Dropout(p=0.2)])
+    # layers.extend([nn.Dropout(p=0.2)])
 
     # Add hidden layers
     for _ in range(nb_of_layers - 2):
         layers.extend([nn.Linear(hidden_size, hidden_size)])
-        if layer_norm:
-            layers.append(nn.LayerNorm(hidden_size))
+        # if layer_norm:
+        # layers.append(nn.LayerNorm(hidden_size))
         layers.append(activation())
-        layers.extend([nn.Dropout(p=0.2)])
+        # layers.extend([nn.Dropout(p=0.2)])
 
     # Add output layer
     layers.append(nn.Linear(hidden_size, out_size))

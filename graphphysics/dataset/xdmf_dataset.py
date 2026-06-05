@@ -47,7 +47,7 @@ class XDMFDataset(BaseDataset):
         self.random_prev = random_prev
 
         if switch_to_val:
-            xdmf_folder = xdmf_folder.replace("train", "test")
+            xdmf_folder = xdmf_folder.replace("train", "valid")
             self.random_next = 1
             self.random_prev = 1
 
@@ -92,19 +92,12 @@ class XDMFDataset(BaseDataset):
         mesh_id = os.path.splitext(os.path.basename(xdmf_file))[0].rsplit("_", 1)[-1]
 
         # Fetch index for previous_data and target
-        # _target_data_index = random.randint(1, self.random_next)
-        # _previous_data_index = random.randint(1, self.random_prev)
         _target_data_index = 1
         _previous_data_index = 1
 
         # Read XDMF file
         with meshio.xdmf.TimeSeriesReader(xdmf_file) as reader:
             num_steps = reader.num_steps
-
-            # if frame - _previous_data_index < 0:
-            #     _previous_data_index = 1
-            # if frame + _target_data_index > num_steps - 1:
-            #     _target_data_index = 1
 
             if frame >= num_steps - 1:
                 raise IndexError(

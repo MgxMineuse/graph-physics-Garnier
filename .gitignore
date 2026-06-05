@@ -2,6 +2,7 @@
 __pycache__/
 
 data_deepmind/
+data_openfoam/
 checkpoints/
 meshes/
 predictions/

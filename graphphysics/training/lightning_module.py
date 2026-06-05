@@ -282,7 +282,7 @@ class LightningModule(L.LightningModule):
             _, _, predicted_outputs = self.model(batch)
 
         # Apply mask to predicted outputs and update the last prediction
-        predicted_outputs[mask] = target[mask]
+        predicted_outputs[mask, :2] = target[mask, :2]
         last_prediction = predicted_outputs
         if self.use_previous_data:
             last_previous_data_prediction = predicted_outputs - current_output

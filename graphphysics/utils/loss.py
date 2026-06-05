@@ -125,4 +125,12 @@ class L2Loss(_Loss):
             network_output, node_type, masks, selected_indexes
         )
         errors = ((network_output - target) ** 2)[mask]
-        return torch.mean(errors)
+
+        mask_obstacle = node_type == NodeType.OBSTACLE
+        mask_obstacle = torch.logical_or(
+            mask_obstacle, node_type == NodeType.WALL_BOUNDARY
+        )
+        errors_obstacle = ((network_output - target) ** 2)[mask_obstacle]
+
+        beta = 1.5
+        return torch.mean(errors) + beta * torch.mean(errors_obstacle)
