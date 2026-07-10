@@ -1,29 +1,10 @@
 import torch
 from torch.nn.modules.loss import _Loss
 from torch_geometric.data import Batch
-
 from graphphysics.utils.nodetype import NodeType
+from graphphysics.utils.vectorial_operators import compute_divergence
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def divergence(batch, network_output):
-    row, col = batch.edge_index
-    pos = batch.pos
-
-    dx = pos[col] - pos[row]
-    du = network_output[col] - network_output[row]
-
-    for i in range(dx.shape[0]):
-        for j in range(dx.shape[1]):
-            if dx[i, j] == 0:
-                dx[i, j] = 1e-8
-
-    dudx = du[:, 0] / (dx[:, 0])
-    dudy = du[:, 1] / (dx[:, 1])
-
-    div_edge = dudx + dudy
-    return torch.mean(torch.abs(div_edge))
 
 
 def _prepare_mask_for_loss(
@@ -52,16 +33,7 @@ class L2Loss_physic(_Loss):
     def __name__(self):
         return "MSE and physics"
 
-    def forward(
-        self,
-        target: torch.Tensor,
-        network_output: torch.Tensor,
-        node_type: torch.Tensor,
-        masks: list[NodeType],
-        selected_indexes: torch.Tensor = None,
-        batch: Batch = None,
-        **kwargs
-    ) -> torch.Tensor:
+    def forward(self, network_output: torch.Tensor, graph: Batch) -> torch.Tensor:
         """
         Computes L2 loss for nodes of specific types with a physic term.
 
@@ -75,15 +47,12 @@ class L2Loss_physic(_Loss):
         Returns:
             torch.Tensor: The mean squared error for the specified node types.
         """
-        mask = _prepare_mask_for_loss(
-            network_output, node_type, masks, selected_indexes
+        predict_divergence = compute_divergence(
+            graph, network_output[:, :2], device=network_output.device
         )
-        errors = ((network_output - target) ** 2)[mask]
+        physic_loss = torch.mean(torch.abs(predict_divergence))
 
-        lambda_loss = 1e-4
-        physic_loss = divergence(batch, network_output)
-
-        return torch.mean(errors) + lambda_loss * physic_loss
+        return physic_loss
 
 
 class L2Loss(_Loss):
@@ -101,7 +70,6 @@ class L2Loss(_Loss):
         node_type: torch.Tensor,
         masks: list[NodeType],
         selected_indexes: torch.Tensor = None,
-        batch: Batch = None,
         **kwargs
     ) -> torch.Tensor:
         """
@@ -126,14 +94,16 @@ class L2Loss(_Loss):
         )
         errors = ((network_output - target) ** 2)[mask]
 
-        mask_obstacle = node_type == NodeType.OBSTACLE
-        mask_obstacle = torch.logical_or(
-            mask_obstacle, node_type == NodeType.WALL_BOUNDARY
-        )
-        errors_obstacle = ((network_output - target) ** 2)[mask_obstacle]
+        # mask_obstacle = _prepare_mask_for_loss(
+        #     network_output,
+        #     node_type,
+        #     [NodeType.OBSTACLE],
+        #     selected_indexes,
+        # )
+        # errors_obstacle = ((network_output[:, 2] - target[:, 2]) ** 2)[mask_obstacle]
 
-        beta = 1.5
-        return torch.mean(errors) + beta * torch.mean(errors_obstacle)
+        # beta = 1.5
+        return torch.mean(errors)
 
 
 class L2Loss_sillage(_Loss):

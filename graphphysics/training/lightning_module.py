@@ -126,7 +126,7 @@ class LightningModule(L.LightningModule):
 
     def parallel_scheduled_sampling(self, list_input):
         losses = []
-        y_tilde = [g.y.clone() for g in list_input]
+        y_tilde = [g.y.detach().clone() for g in list_input]
 
         for k in range(self.K + 1):
             for t in range(len(list_input)):
@@ -134,7 +134,7 @@ class LightningModule(L.LightningModule):
                 if t > 0:
                     input_graph.x[
                         :, self.model.output_index_start : self.model.output_index_end
-                    ] = y_tilde[t - 1]
+                    ] = y_tilde[t - 1].detach()
                 node_type = input_graph.x[:, self.model.node_type_index]
 
                 with torch.set_grad_enabled(k == self.K):
@@ -185,7 +185,7 @@ class LightningModule(L.LightningModule):
         loss = torch.stack(losses).mean()
         self.log(
             "train_loss",
-            loss,
+            loss.detach(),
             on_step=True,
             on_epoch=True,
             prog_bar=True,
@@ -204,12 +204,11 @@ class LightningModule(L.LightningModule):
             network_output=network_output,
             node_type=node_type,
             masks=self.loss_masks,
-            batch=batch,
         )
 
         self.log(
             "train_loss",
-            loss,
+            loss.detach(),
             on_step=True,
             on_epoch=True,
             prog_bar=True,
@@ -263,9 +262,14 @@ class LightningModule(L.LightningModule):
         batch = batch.clone()
         # Prepare the batch for the current step
         if last_prediction is not None:
-            # Update the batch with the last prediction
+            # # Update the batch with the last prediction
+            # batch.x[:, self.model.output_index_start : self.model.output_index_end] = (
+            #     last_prediction.detach()
+            # )
+
+            # TAG: if pressure only in output
             batch.x[:, self.model.output_index_start : self.model.output_index_end] = (
-                last_prediction.detach()
+                last_prediction[:, : self.model.output_index_end].detach()
             )
             if self.use_previous_data:
                 batch.x[:, self.previous_data_start : self.previous_data_end] = (
@@ -313,18 +317,20 @@ class LightningModule(L.LightningModule):
         )
 
         if self.global_rank == 0 and self.current_val_trajectory == 0:
+            # TAG: if pressure only in output
+            batch.predicted_outputs = predicted_outputs
             self.trajectory_to_save.append(batch)
         node_type = batch.x[:, self.model.node_type_index]
 
-        self.val_step_outputs.append(predicted_outputs.cpu())
-        self.val_step_targets.append(target.cpu())
+        self.val_step_outputs.append(predicted_outputs.detach().cpu())
+        self.val_step_targets.append(target.detach().cpu())
 
         val_loss = self.loss(
-            target, predicted_outputs, node_type, masks=self.loss_masks, batch=batch
+            target, predicted_outputs, node_type, masks=self.loss_masks, graph=batch
         )
         self.log(
             "val_loss",
-            val_loss,
+            val_loss.detach(),
             on_step=False,
             on_epoch=True,
             prog_bar=True,

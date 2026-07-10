@@ -49,7 +49,6 @@ class Simulator(nn.Module):
             Defaults to "checkpoint/simulator.pth".
         """
         super(Simulator, self).__init__()
-
         self.node_input_size = node_input_size
         self.edge_input_size = edge_input_size if edge_input_size > 0 else None
         self.output_size = output_size
@@ -81,7 +80,19 @@ class Simulator(nn.Module):
         Returns:
             torch.Tensor: The previous target values extracted from node features.
         """
-        return inputs.x[:, self.output_index_start : self.output_index_end]
+        pre_target = inputs.x[
+            :, self.output_index_start : self.output_index_end
+        ].clone()
+
+        # # to predict directly pressure, not delta pressure
+        # pre_target[:, self.output_index_end - 1] = 0
+
+        # TAG: if pressure only in output
+        pressure_like = torch.zeros(
+            pre_target.shape[0], device=pre_target.device
+        ).unsqueeze(1)
+        pre_target = torch.cat((pre_target, pressure_like), dim=1)
+        return pre_target
 
     def _get_target_normalized(
         self, inputs: Data, is_training: bool = True
@@ -136,6 +147,9 @@ class Simulator(nn.Module):
 
         return node_features
 
+    def _get_id(self, inputs: Data) -> torch.Tensor:
+        return inputs.x[:, self.feature_index_end]
+
     def _build_input_graph(
         self, inputs: Data, is_training: bool
     ) -> Tuple[Data, torch.Tensor]:
@@ -160,8 +174,11 @@ class Simulator(nn.Module):
         else:
             edge_attr = inputs.edge_attr
 
+        id = self._get_id(inputs)
+
         graph = Data(
             x=node_features_normalized,
+            id=id,
             pos=inputs.pos,
             edge_attr=edge_attr,
             edge_index=inputs.edge_index,

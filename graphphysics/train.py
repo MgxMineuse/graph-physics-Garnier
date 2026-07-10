@@ -185,6 +185,7 @@ def main(argv):
             learning_rate=initial_lr,
             num_steps=num_steps,
             trajectory_length=train_dataset.trajectory_length,
+            weights_only=False,
             timestep=train_dataset.dt,
             **prev_data_kwargs,
         )
@@ -212,19 +213,21 @@ def main(argv):
     #     wandb_run = wandb.init(project=wandb_project_name)
 
     # wandb_logger = WandbLogger(experiment=wandb_run)
-    # lightning_module.wandb_run_id = wandb_logger.experiment.id
-    # if model_save_name is not None:
-    #     checkpoint_callback = ModelCheckpoint(
-    #         dirpath="checkpoints/", filename=model_save_name
-    #     )
-    # else:
-    #     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints")
+
+    if model_save_name is not None:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath="checkpoints/", filename=model_save_name
+        )
+    else:
+        checkpoint_callback = ModelCheckpoint(dirpath="checkpoints")
 
     wandb_logger = WandbLogger(
         project=wandb_project_name,
         id=lightning_module.wandb_run_id if resume_training else None,
         resume="allow" if resume_training else None,
     )
+    lightning_module.wandb_run_id = wandb_logger.experiment.id
+
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Configure Trainer
@@ -236,7 +239,7 @@ def main(argv):
         logger=wandb_logger,
         callbacks=[
             ColabProgressBar(),
-            # checkpoint_callback,
+            checkpoint_callback,
             lr_monitor,
         ],
         log_every_n_steps=100,
@@ -262,6 +265,7 @@ def main(argv):
             train_dataloaders=train_dataloader,
             val_dataloaders=valid_dataloader,
             ckpt_path=model_path,
+            weights_only=False,
         )
     else:
         logger.success("Starting training")

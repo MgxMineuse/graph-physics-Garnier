@@ -63,6 +63,16 @@ def convert_to_meshio_vtu(graph: Data, add_all_data: bool = False) -> meshio.Mes
         for i in range(y_data.shape[1]):
             mesh.point_data[f"y{i}"] = y_data[:, i]
 
+    # TAG: if pressure only in output
+    if (
+        add_all_data
+        and hasattr(graph, "predicted_outputs")
+        and graph.predicted_outputs is not None
+    ):
+        outputs_data = graph.predicted_outputs.cpu().numpy()
+        for i in range(outputs_data.shape[1]):
+            mesh.point_data[f"output{i}"] = outputs_data[:, i]
+
     return mesh
 
 

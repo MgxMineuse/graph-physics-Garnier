@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing
 
 
@@ -102,16 +103,12 @@ def build_mlp(
     activation = ACTIVATION[act]
 
     layers = [nn.Linear(in_size, hidden_size)]
-    # if layer_norm:
-    #     layers.append(nn.LayerNorm(hidden_size))
     layers.append(activation())
     # layers.extend([nn.Dropout(p=0.2)])
 
     # Add hidden layers
     for _ in range(nb_of_layers - 2):
         layers.extend([nn.Linear(hidden_size, hidden_size)])
-        # if layer_norm:
-        # layers.append(nn.LayerNorm(hidden_size))
         layers.append(activation())
         # layers.extend([nn.Dropout(p=0.2)])
 
@@ -119,7 +116,7 @@ def build_mlp(
     layers.append(nn.Linear(hidden_size, out_size))
 
     if layer_norm:
-        layers.append(RMSNorm(out_size))
+        layers.append(nn.LayerNorm(out_size))
 
     return nn.Sequential(*layers)
 
@@ -451,3 +448,67 @@ class GraphNetBlock(MessagePassing):
         node_input = torch.cat([x, aggr_out], dim=-1)
         x = self.node_block(node_input)
         return x
+
+
+class GraphDiffusionKernelLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, batched_data: Data) -> torch.Tensor:
+        h_global_list = []
+
+        identifiants = torch.unique(batched_data.id)
+
+        for i in identifiants:
+            mask_id = batched_data.id == i
+            dist_sq = (
+                torch.linalg.norm(
+                    batched_data.pos[mask_id].unsqueeze(1)
+                    - batched_data.pos[mask_id].unsqueeze(0),
+                    dim=2,
+                )
+                ** 2
+            )
+            kernel = torch.exp(-dist_sq)
+
+            mask_kernel = kernel < 0.99
+            mask_kernel = torch.logical_and(mask_kernel, kernel > 0.95)
+
+            kernel = kernel * mask_kernel.float()
+            h_global = torch.matmul(kernel, batched_data.x[mask_id])
+            h_global_list.append(h_global)
+        return torch.concat(h_global_list)
+
+
+class GraphNeuralKernelLayer(nn.Module):
+    def __init__(self, hidden_dim: int = 16, n_layers: int = 2):
+        super().__init__()
+        self.neural_kernel = build_mlp(
+            in_size=2,
+            hidden_size=hidden_dim,
+            out_size=1,
+            nb_of_layers=n_layers,
+            layer_norm=False,
+        )
+
+    def forward(self, batched_data: Data) -> torch.Tensor:
+        h_global_list = []
+
+        identifiants = torch.unique(batched_data.id)
+
+        for i in identifiants:
+
+            mask_id = batched_data.id == i
+            dist = batched_data.pos[mask_id].unsqueeze(1) - batched_data.pos[
+                mask_id
+            ].unsqueeze(0)
+            with torch.no_grad():
+                dist_sq = torch.linalg.norm(dist, dim=2)
+                mask_kernel = torch.logical_and(dist_sq > 0.08, dist_sq < 0.18)
+
+            kernel = self.neural_kernel(dist).squeeze(-1)
+            kernel = torch.softmax(kernel, dim=1)
+            kernel = kernel * mask_kernel.float()
+            h_global = torch.matmul(kernel, batched_data.x[mask_id])
+            h_global_list.append(h_global)
+        return torch.concat(h_global_list)

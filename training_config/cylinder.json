@@ -2,31 +2,31 @@
     "dataset": {
         "extension": "xdmf",
         "xdmf_folder": "data_deepmind/cylinder_flow/train",
-        "meta_path": "dataset_config/meta.json",
+        "meta_path": "dataset_config/cylinder_meta.json",
         "targets": [
             "velocity", "pressure"
         ]
     },
     "model": {
         "type": "epd",
-        "message_passing_num": 10,
-        "hidden_size": 64,
-        "node_input_size": 7,
+        "message_passing_num": 2,
+        "hidden_size": 16,
+        "node_input_size": 6,
         "output_size": 3,
         "edge_input_size": 3
     },
     "index": {
         "feature_index_start": 0,
-        "feature_index_end": 7,
+        "feature_index_end": 6,
         "output_index_start": 0,
-        "output_index_end": 3,
+        "output_index_end": 2,
         "node_type_index": 7
     },
     "transformations": {
         "preprocessing": {
             "noise": 0.02,
             "noise_index_start": [0],
-            "noise_index_end": [3],
+            "noise_index_end": [2],
             "masking": 0
         },
         "world_pos_parameters": {

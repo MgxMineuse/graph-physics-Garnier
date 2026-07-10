@@ -2,10 +2,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import Data
 
-from graphphysics.models.layers import (
-    GraphNetBlock,
-    build_mlp,
-)
+from graphphysics.models.layers import GraphNetBlock, build_mlp, GraphNeuralKernelLayer
 
 
 class EncodeProcessDecode(nn.Module):
@@ -76,6 +73,9 @@ class EncodeProcessDecode(nn.Module):
             ]
         )
 
+        # self.kernel = GraphNeuralKernelLayer()
+        # self.combine = nn.Sequential(nn.Linear(hidden_size * 2, hidden_size), nn.ReLU())
+
     def forward(self, graph: Data) -> torch.Tensor:
         """
         Forward pass of the EncodeProcessDecode model.
@@ -95,6 +95,9 @@ class EncodeProcessDecode(nn.Module):
             x = self.nodes_encoder(graph.x)
             edge_attr = self.edges_encoder(graph.edge_attr)
 
+            # graph.x, graph.edge_attr = x, edge_attr
+            # h_global = self.kernel(graph)
+
         for _ in range(self.nb_iterations):
             for block in self.processor_list:
                 x, edge_attr = block(x, edge_index, edge_attr)
@@ -102,5 +105,7 @@ class EncodeProcessDecode(nn.Module):
         if self.only_processor:
             return x
         else:
+            # x = torch.cat([x, h_global], dim=1)
+            # x = self.combine(x)
             x_decoded = self.decode_module(x)
             return x_decoded
