@@ -33,7 +33,8 @@ class Simulator(nn.Module):
         """
         Initializes the Simulator module.
 
-        Args:
+        Parameters
+        ----------
             node_input_size (int): Size of node input features.
             edge_input_size (int): Size of edge input features.
             output_size (int): Size of the output/prediction from the network.
@@ -49,6 +50,7 @@ class Simulator(nn.Module):
             Defaults to "checkpoint/simulator.pth".
         """
         super(Simulator, self).__init__()
+
         self.node_input_size = node_input_size
         self.edge_input_size = edge_input_size if edge_input_size > 0 else None
         self.output_size = output_size
@@ -74,16 +76,19 @@ class Simulator(nn.Module):
         """
         Extracts the previous target values from the input data.
 
-        Args:
-            inputs (Data): Input graph data containing node features.
+        Parameters
+        ----------
+            inputs : Data
+                Input graph data containing node features.
 
-        Returns:
-            torch.Tensor: The previous target values extracted from node features.
+        Returns
+        -------
+            torch.Tensor
+                The previous target values extracted from node features.
         """
         pre_target = inputs.x[
             :, self.output_index_start : self.output_index_end
         ].clone()
-
         # # to predict directly pressure, not delta pressure
         # pre_target[:, self.output_index_end - 1] = 0
 
@@ -100,12 +105,17 @@ class Simulator(nn.Module):
         """
         Computes the normalized target delta (difference between target and pre-target).
 
-        Args:
-            inputs (Data): Input graph data containing target values.
-            is_training (bool, optional): Whether the model is in training mode. Defaults to True.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data containing target values.
+            is_training: bool, optional
+                Whether the model is in training mode. Defaults to True.
 
-        Returns:
-            torch.Tensor: The normalized target delta.
+        Returns
+        -------
+            torch.Tensor
+                The normalized target delta.
         """
         target = inputs.y
         pre_target = self._get_pre_target(inputs)
@@ -118,11 +128,15 @@ class Simulator(nn.Module):
         """
         Converts node types to one-hot encoded vectors.
 
-        Args:
-            inputs (Data): Input graph data containing node types.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data containing node types.
 
-        Returns:
-            torch.Tensor: One-hot encoded node types.
+        Returns
+        -------
+            torch.Tensor
+                One-hot encoded node types.
         """
         node_type = inputs.x[:, self.node_type_index]
         return torch.nn.functional.one_hot(
@@ -135,20 +149,22 @@ class Simulator(nn.Module):
         """
         Builds the node features by concatenating selected features with one-hot encoded node types.
 
-        Args:
-            inputs (Data): Input graph data containing node features.
-            one_hot_type (torch.Tensor): One-hot encoded node types.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data containing node features.
+            one_hot_type: torch.Tensor
+                One-hot encoded node types.
 
-        Returns:
-            torch.Tensor: The concatenated node features.
+        Returns
+        -------
+            torch.Tensor
+                The concatenated node features.
         """
         features = inputs.x[:, self.feature_index_start : self.feature_index_end]
         node_features = torch.cat([features, one_hot_type], dim=1)
 
         return node_features
-
-    def _get_id(self, inputs: Data) -> torch.Tensor:
-        return inputs.x[:, self.feature_index_end]
 
     def _build_input_graph(
         self, inputs: Data, is_training: bool
@@ -156,12 +172,17 @@ class Simulator(nn.Module):
         """
         Builds the input graph for the model by normalizing features and target delta.
 
-        Args:
-            inputs (Data): Input graph data.
-            is_training (bool): Whether the model is in training mode.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data.
+            is_training: bool
+                Whether the model is in training mode.
 
-        Returns:
-            Tuple[Data, torch.Tensor]: A tuple containing the processed input graph and normalized target delta.
+        Returns
+        -------
+            Tuple[Data, torch.Tensor]
+                A tuple containing the processed input graph and normalized target delta.
         """
         target_delta_normalized = self._get_target_normalized(inputs, is_training)
         one_hot_type = self._get_one_hot_type(inputs)
@@ -174,11 +195,8 @@ class Simulator(nn.Module):
         else:
             edge_attr = inputs.edge_attr
 
-        id = self._get_id(inputs)
-
         graph = Data(
             x=node_features_normalized,
-            id=id,
             pos=inputs.pos,
             edge_attr=edge_attr,
             edge_index=inputs.edge_index,
@@ -190,12 +208,17 @@ class Simulator(nn.Module):
         """
         Reconstructs the outputs by inverting normalization and adding the pre-target.
 
-        Args:
-            inputs (Data): Input graph data.
-            network_output (torch.Tensor): The output from the network.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data.
+            network_output: torch.Tensor
+                The output from the network.
 
-        Returns:
-            torch.Tensor: The reconstructed outputs.
+        Returns
+        -------
+            torch.Tensor
+                The reconstructed outputs.
         """
         pre_target = self._get_pre_target(inputs)
         update = self._output_normalizer.inverse(network_output)
@@ -207,10 +230,13 @@ class Simulator(nn.Module):
         """
         Forward pass of the Simulator module.
 
-        Args:
-            inputs (Data): Input graph data.
+        Parameters
+        ----------
+            inputs: Data
+                Input graph data.
 
-        Returns:
+        Returns
+        -------
             Tuple containing:
                 - network_output (torch.Tensor): The network's output.
                 - target_delta_normalized (torch.Tensor): The normalized target delta.
@@ -221,7 +247,7 @@ class Simulator(nn.Module):
         )
         network_output = self.model(graph)
 
-        if self.training:
+        if self.training and None:
             return network_output, target_delta_normalized, None
         else:
             outputs = self.build_outputs(inputs=inputs, network_output=network_output)
@@ -238,8 +264,10 @@ class Simulator(nn.Module):
         """
         Loads the model and normalizer states from a checkpoint file.
 
-        Args:
-            ckpdir (str, optional): Path to the checkpoint file. Defaults to self.model_dir.
+        Parameters
+        ----------
+            ckpdir: str, optional
+                Path to the checkpoint file. Defaults to self.model_dir.
         """
         if ckpdir is None:
             ckpdir = self.model_dir
@@ -260,8 +288,10 @@ class Simulator(nn.Module):
         """
         Saves the model and normalizer states to a checkpoint file.
 
-        Args:
-            savedir (str, optional): Path to save the checkpoint file. Defaults to self.model_dir.
+        Parameters
+        ----------
+            savedir: str, optional
+                Path to save the checkpoint file. Defaults to self.model_dir.
         """
         if savedir is None:
             savedir = self.model_dir

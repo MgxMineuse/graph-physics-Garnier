@@ -162,6 +162,7 @@ def main(argv):
         )
 
     # Create DataLoaders
+    # train_dataloader = TrajectoryDataLoader(**train_dataloader_kwargs)
     train_dataloader = DataLoader(**train_dataloader_kwargs)
     valid_dataloader = DataLoader(**valid_dataloader_kwargs)
 
@@ -189,7 +190,8 @@ def main(argv):
             timestep=train_dataset.dt,
             **prev_data_kwargs,
         )
-        logger.info(f"Resuming WandB run: {lightning_module.wandb_run_id}")
+        if resume_training:
+            logger.info(f"Resuming WandB run: {lightning_module.wandb_run_id}")
     else:
         logger.info("Initializing new model")
         lightning_module = LightningModule(
@@ -200,19 +202,9 @@ def main(argv):
             trajectory_length=train_dataset.trajectory_length,
             timestep=train_dataset.dt,
             nb_iterations=nb_iterations,
-            k_param=6,  # facteur pour le decay de la probabilité du scheduled sampling
+            k_param=8,  # facteur pour le decay de la probabilité du scheduled sampling
             **prev_data_kwargs,
         )
-
-    # Initialize WandbLogger
-    # if resume_training:
-    #     wandb_run = wandb.init(
-    #         project=wandb_project_name, id=lightning_module.wandb_run_id, resume="allow"
-    #     )
-    # else:
-    #     wandb_run = wandb.init(project=wandb_project_name)
-
-    # wandb_logger = WandbLogger(experiment=wandb_run)
 
     if model_save_name is not None:
         checkpoint_callback = ModelCheckpoint(
@@ -233,8 +225,8 @@ def main(argv):
     # Configure Trainer
     trainer = Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1,
-        # strategy="ddp",
+        devices=4,
+        strategy="ddp",
         max_epochs=num_epochs,
         logger=wandb_logger,
         callbacks=[
@@ -245,7 +237,7 @@ def main(argv):
         log_every_n_steps=100,
         gradient_clip_val=1.0,
     )
-
+    wandb_logger.watch(lightning_module, log="gradients", log_freq=100)
     if trainer.global_rank == 0:
         wandb_logger.experiment.config.update(
             {

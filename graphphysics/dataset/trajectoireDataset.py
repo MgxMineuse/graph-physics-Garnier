@@ -138,7 +138,6 @@ class TrajectoryXDMFDataset(XDMFDataset):
                     point_data=point_data_dict,
                     time=time,
                     target=target_data,
-                    id=mesh_id,
                     next_data=next_data,
                 )
                 graph.target_dt = self.dt
@@ -248,7 +247,6 @@ class TrajectoryDataLoader(torch.utils.data.DataLoader):
         # Remove for PyTorch Lightning:
         kwargs.pop("collate_fn", None)
 
-        # Save for PyTorch Lightning < 1.6:
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 

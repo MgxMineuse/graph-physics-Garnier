@@ -13,7 +13,7 @@ from graphphysics.training.parse_parameters import (
     get_model,
     get_simulator,
 )
-from graphphysics.utils.loss import L2Loss, L2Loss_physic
+from graphphysics.utils.loss import *
 from graphphysics.utils.meshio_mesh import convert_to_meshio_vtu
 from graphphysics.utils.nodetype import NodeType
 from graphphysics.utils.scheduler import CosineWarmupScheduler
@@ -46,6 +46,7 @@ class LightningModule(L.LightningModule):
             NodeType.NORMAL,
             NodeType.OUTFLOW,
             NodeType.WALL_BOUNDARY,
+            NodeType.OBSTACLE,
         ],
         use_previous_data: bool = False,
         previous_data_start: int = None,
@@ -53,7 +54,7 @@ class LightningModule(L.LightningModule):
         prediction_save_path: str = "predictions",
         nb_iterations: int = 1,
         K: int = 1,
-        k_param: float = 10,
+        k_param: float = 8,
     ):
         """
         Initializes the LightningModule.
@@ -85,6 +86,8 @@ class LightningModule(L.LightningModule):
         self.model = get_simulator(param=parameters, model=processor, device=None)
 
         self.loss = L2Loss()
+        self.loss2 = Loss_pressure()
+        self.loss_physics = L2Loss_vorticity()
 
         self.loss_masks = masks
 
@@ -115,7 +118,6 @@ class LightningModule(L.LightningModule):
         self.prediction_trajectory: list[Batch] = []
         self.last_pred_prediction = None
         self.last_previous_data_pred_prediction = None
-        self.rmse_one_step = []
 
         # scheduled sampling
         self.K = K
@@ -130,11 +132,13 @@ class LightningModule(L.LightningModule):
 
         for k in range(self.K + 1):
             for t in range(len(list_input)):
-                input_graph = input_graph.to(self.device)
+                input_graph = list_input[t].to(self.device)
                 if t > 0:
                     input_graph.x[
                         :, self.model.output_index_start : self.model.output_index_end
-                    ] = y_tilde[t - 1].detach()
+                    ] = y_tilde[t - 1][
+                        :, self.model.output_index_start : self.model.output_index_end
+                    ].detach()
                 node_type = input_graph.x[:, self.model.node_type_index]
 
                 with torch.set_grad_enabled(k == self.K):
@@ -169,20 +173,21 @@ class LightningModule(L.LightningModule):
 
         return torch.stack(losses)
 
-    def training_step_scheduled(self, batch: Batch):
+    def training_step(self, batch: Batch):
         """
         Implement the scheduled sampling method for training
         """
-        self.p = self.k_param / (
-            self.k_param + np.exp(self.trainer.current_epoch / self.k_param)
+        # inverse sigmoid decay
+        self.p = (
+            1
+            if self.trainer.current_epoch == 0
+            else self.k_param
+            / (self.k_param + np.exp(self.trainer.current_epoch / self.k_param))
         )
-        self.p = 0.8
-        losses = []
-        for traj in batch:
-            losses_traj = self.parallel_scheduled_sampling(traj)
-            losses.append(losses_traj)
+        # self.p = 0.8
+        losses_traj = self.parallel_scheduled_sampling(batch)
 
-        loss = torch.stack(losses).mean()
+        loss = torch.mean(losses_traj)
         self.log(
             "train_loss",
             loss.detach(),
@@ -193,10 +198,51 @@ class LightningModule(L.LightningModule):
         )
         return loss
 
-    def training_step(self, batch: Batch):
-        batch = batch.to(self.device, non_blocking=True)
+    # def on_after_backward(self):
+    #     with torch.no_grad():
+    #         groups = {
+    #             "nodes_encoder": self.model.model.nodes_encoder,
+    #             "edges_encoder": self.model.model.edges_encoder,
+    #             "message_passing": self.model.model.processor_list,
+    #             "decoder": self.model.model.decode_module,
+    #         }
+    #         if self.global_step % 100 == 0:
+    #             for group_name, module in groups.items():
+    #                 total_norm = 0
+    #                 count = 0
+    #                 if group_name == "message_passing":
+    #                     for i, layer in enumerate(module):
+
+    #                         norm = 0.0
+
+    #                         for p in layer.parameters():
+    #                             if p.grad is not None:
+    #                                 norm += p.grad.detach().norm().item() ** 2
+
+    #                         norm = norm**0.5
+
+    #                         self.log(f"grad_norm/mp_{i}", norm)
+    #                 else:
+
+    #                     for param in module.parameters():
+    #                         if param.grad is not None:
+    #                             total_norm += param.grad.detach().norm().item() ** 2
+    #                             count += 1
+    #                     if count > 0:
+    #                         total_norm = total_norm**0.5
+
+    #                         self.log(
+    #                             f"grad_norm/{group_name}",
+    #                             total_norm,
+    #                             on_step=True,
+    #                             on_epoch=False,
+    #                             sync_dist=True,
+    #                         )
+
+    def training_step_non_scheduled(self, batch: Batch):
+        batch = batch.clone().to(self.device, non_blocking=True)
         node_type = batch.x[:, self.model.node_type_index]
-        network_output, target_delta_normalized, _ = self.model(batch)
+        network_output, target_delta_normalized, predicted_outputs = self.model(batch)
 
         loss = self.loss(
             graph=batch,
@@ -204,6 +250,28 @@ class LightningModule(L.LightningModule):
             network_output=network_output,
             node_type=node_type,
             masks=self.loss_masks,
+        )
+        # loss_vorticity = self.loss_physics(
+        #     graph=batch,
+        #     predicted_outputs=predicted_outputs,
+        #     node_type=node_type,
+        #     masks=self.loss_masks,
+        # )
+        with torch.no_grad():
+            loss_pressure = self.loss2(
+                graph=batch,
+                target=target_delta_normalized,
+                network_output=network_output,
+                node_type=node_type,
+                masks=self.loss_masks,
+            )
+        self.log(
+            "pressure_cylinder_loss",
+            loss_pressure.detach(),
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
         )
 
         self.log(
@@ -214,6 +282,17 @@ class LightningModule(L.LightningModule):
             prog_bar=True,
             sync_dist=True,
         )
+
+        # self.log(
+        #     "train_physic_loss",
+        #     loss_vorticity.detach(),
+        #     on_step=True,
+        #     on_epoch=True,
+        #     prog_bar=True,
+        #     sync_dist=True,
+        # )
+        # pde_loss_weight = np.exp(-(20 - self.current_epoch) / 3) / 10
+        # loss = loss + pde_loss_weight * loss_physic
         return loss
 
     def _save_trajectory_to_xdmf(
@@ -286,8 +365,10 @@ class LightningModule(L.LightningModule):
             _, _, predicted_outputs = self.model(batch)
 
         # Apply mask to predicted outputs and update the last prediction
-        predicted_outputs[mask, :2] = target[mask, :2]
-        last_prediction = predicted_outputs
+        predicted_outputs[mask, :2] = target[
+            mask, :2
+        ]  # on remplace seulement les composantes de la vitesse
+        last_prediction = predicted_outputs.clone()
         if self.use_previous_data:
             last_previous_data_prediction = predicted_outputs - current_output
 
@@ -343,10 +424,6 @@ class LightningModule(L.LightningModule):
             rmse = torch.sqrt(squared_diff.mean()).detach().cpu()
             self.first_step_losses.append(rmse)
 
-            # rmse_vitesse = torch.sqrt(squared_diff[:, :2].mean()).detach().cpu()
-            # rmse_pression = torch.sqrt(squared_diff[:, 2].mean()).detach().cpu()
-            # self.rmse_one_step.append(torch.tensor([rmse_vitesse, rmse_pression]))
-
         self.step_counter += 1
 
     def _reset_validation_epoch_end(self):
@@ -358,7 +435,6 @@ class LightningModule(L.LightningModule):
         self.trajectory_to_save.clear()
         self.step_counter = 0
         self.first_step_losses = []
-        self.rmse_one_step = []
 
     def on_validation_start(self):
         ### Moyen, trop dépendant de la version de pytorch lightning
@@ -377,17 +453,6 @@ class LightningModule(L.LightningModule):
         # Compute RMSE over all rollouts
         squared_diff = (predicteds - targets) ** 2
         all_rollout_rmse = torch.sqrt(squared_diff.mean()).item()
-
-        # rmse_vitesse = torch.sqrt(squared_diff[:, :2].mean()).item()
-        # rmse_presssion = torch.sqrt(squared_diff[:, 2].mean()).item()
-        # print(
-        #     "Global rank",
-        #     self.global_rank,
-        #     "RMSE rollout vitesse:",
-        #     rmse_vitesse,
-        #     " RMSE rollout pression:",
-        #     rmse_presssion,
-        # )
 
         self.log(
             "val_all_rollout_rmse",
@@ -408,17 +473,6 @@ class LightningModule(L.LightningModule):
                 prog_bar=True,
                 sync_dist=True,
             )
-
-            # rmse_V_one_step = torch.stack(self.rmse_one_step)[:, 0].mean().item()
-            # rmse_P_one_step = torch.stack(self.rmse_one_step)[:, 1].mean().item()
-            # print(
-            #     "Global rank",
-            #     self.global_rank,
-            #     "RMSE one step vitesse:",
-            #     rmse_V_one_step,
-            #     " RMSE one step pression:",
-            #     rmse_P_one_step,
-            # )
 
         if self.global_rank == 0:
             # Save trajectory graphs
@@ -447,6 +501,7 @@ class LightningModule(L.LightningModule):
             weight_decay=0.0001,
             betas=(0.9, 0.95),
         )
+        opt.zero_grad(set_to_none=True)
         sch = CosineWarmupScheduler(opt, warmup=self.warmup, max_iters=self.num_steps)
         return {
             "optimizer": opt,

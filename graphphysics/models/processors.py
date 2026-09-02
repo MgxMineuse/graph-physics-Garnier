@@ -2,17 +2,56 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import Data
 
-from graphphysics.models.layers import GraphNetBlock, build_mlp, GraphNeuralKernelLayer
+from graphphysics.models.layers import (
+    GraphNetBlock,
+    build_mlp,
+)
 
 
 class EncodeProcessDecode(nn.Module):
     """
-    An Encode-Process-Decode model for graph neural networks.
+    Encode-Process-Decode model for graph neural networks.
 
-    This model architecture is designed for processing graph-structured data. It consists of three main components:
-    an encoder, a processor, and a decoder. The encoder maps input graph features to a latent space, the processor
-    performs message passing and updates node and edge representations, and the decoder generates the final output from
-    the processed graph.
+    This model architecture is designed to process graph-structured data through three main steps:
+    encoding, processing, and decoding. The encoder maps input node and edge features to a latent space,
+    the processor performs message passing to update node and edge representations, and the decoder
+    generates the final output from the processed graph.
+
+    Parameters
+    ----------
+    message_passing_num : int
+        Number of message passing steps (i.e., number of GraphNetBlock layers).
+    node_input_size : int
+        Size of the input node features.
+    edge_input_size : int
+        Size of the input edge features.
+    output_size : int
+        Size of the output features.
+    hidden_size : int, optional
+        Size of the hidden representations in all layers. Default is 128.
+    only_processor : bool, optional
+        If True, only the processor is used (no encoding or decoding steps). Default is False.
+    nb_iterations : int, optional
+        Number of iterations for message passing. Default is 1.
+
+    Attributes
+    ----------
+    only_processor : bool
+        Whether only the processor is used.
+    hidden_size : int
+        Size of the hidden representations.
+    d : int
+        Size of the output features (alias for `output_size`).
+    nb_iterations : int
+        Number of iterations for message passing.
+    nodes_encoder : torch.nn.Module
+        MLP for encoding node features. Only initialized if `only_processor` is False.
+    edges_encoder : torch.nn.Module
+        MLP for encoding edge features. Only initialized if `only_processor` is False.
+    decode_module : torch.nn.Module
+        MLP for decoding hidden representations to output. Only initialized if `only_processor` is False.
+    processor_list : torch.nn.ModuleList
+        List of GraphNetBlock modules for message passing.
     """
 
     def __init__(
@@ -26,16 +65,24 @@ class EncodeProcessDecode(nn.Module):
         nb_iterations: int = 1,
     ):
         """
-        Initializes the EncodeProcessDecode model.
+        Initialize the EncodeProcessDecode model.
 
-        Args:
-            message_passing_num (int): Number of message passing steps.
-            node_input_size (int): Size of the node input features.
-            edge_input_size (int): Size of the edge input features.
-            output_size (int): Size of the output features.
-            hidden_size (int, optional): Size of the hidden representations. Defaults to 128.
-            only_processor (bool, optional): If True, only the processor is used (no encoding or decoding).
-            Defaults to False.
+        Parameters
+        ----------
+        message_passing_num : int
+            Number of message passing steps.
+        node_input_size : int
+            Size of the input node features.
+        edge_input_size : int
+            Size of the input edge features.
+        output_size : int
+            Size of the output features.
+        hidden_size : int, optional
+            Size of the hidden representations. Default is 128.
+        only_processor : bool, optional
+            If True, only the processor is used (no encoding or decoding). Default is False.
+        nb_iterations : int, optional
+            Number of iterations for message passing. Default is 1.
         """
         super().__init__()
         self.only_processor = only_processor
@@ -73,19 +120,23 @@ class EncodeProcessDecode(nn.Module):
             ]
         )
 
-        # self.kernel = GraphNeuralKernelLayer()
-        # self.combine = nn.Sequential(nn.Linear(hidden_size * 2, hidden_size), nn.ReLU())
-
     def forward(self, graph: Data) -> torch.Tensor:
         """
         Forward pass of the EncodeProcessDecode model.
 
-        Args:
-            graph (Data): Input graph data containing 'x' (node features), 'edge_index', and 'edge_attr'.
+        Parameters
+        ----------
+        graph : Data
+            Input graph data from `torch_geometric.data.Data`, containing:
+            - `x` : Node features, shape (num_nodes, node_input_size).
+            - `edge_index` : Graph connectivity, shape (2, num_edges).
+            - `edge_attr` : Edge features, shape (num_edges, edge_input_size).
 
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Updated node features and edge features.
-                If 'only_processor' is False, the node features are passed through the decoder before returning.
+        Returns
+        -------
+        torch.Tensor
+            Output node features after processing and decoding, shape (num_nodes, output_size).
+            If `only_processor` is True, returns the processed node features without decoding.
         """
         edge_index = graph.edge_index
 
@@ -95,9 +146,6 @@ class EncodeProcessDecode(nn.Module):
             x = self.nodes_encoder(graph.x)
             edge_attr = self.edges_encoder(graph.edge_attr)
 
-            # graph.x, graph.edge_attr = x, edge_attr
-            # h_global = self.kernel(graph)
-
         for _ in range(self.nb_iterations):
             for block in self.processor_list:
                 x, edge_attr = block(x, edge_index, edge_attr)
@@ -105,7 +153,5 @@ class EncodeProcessDecode(nn.Module):
         if self.only_processor:
             return x
         else:
-            # x = torch.cat([x, h_global], dim=1)
-            # x = self.combine(x)
             x_decoded = self.decode_module(x)
             return x_decoded

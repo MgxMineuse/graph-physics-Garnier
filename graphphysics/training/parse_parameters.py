@@ -160,8 +160,9 @@ def get_dataset(
     if len(targets) == 0:
         raise ValueError("Please provide a list of target properties to predict.")
     extension = dataset_params.get("extension", "")
+
     if extension == "xdmf":
-        if not switch_to_val and False:
+        if not switch_to_val:
             return TrajectoryXDMFDataset(
                 xdmf_folder=dataset_params["xdmf_folder"],
                 meta_path=dataset_params["meta_path"],
@@ -171,7 +172,7 @@ def get_dataset(
                 add_edge_features=use_edge_feature,
                 use_previous_data=use_previous_data,
                 switch_to_val=switch_to_val,
-                chunk_size=5,
+                chunk_size=10,
             )
         else:
             return XDMFDataset(

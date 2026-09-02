@@ -1,15 +1,13 @@
 .vscode/
 __pycache__/
 
-data_deepmind/
-data_openfoam/
+data_*/
 checkpoints/
 meshes/
 predictions/
 runs/
 wandb/
+docs/
 
-copy.sh
-job.sh
 *.ipynb
 script.sh

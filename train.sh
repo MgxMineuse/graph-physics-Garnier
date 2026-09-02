@@ -1,10 +1,13 @@
-CUDA_VISIBLE_DEVICES=1,2,3 python -m graphphysics.train \
+CUDA_VISIBLE_DEVICES=0 python -m graphphysics.train \
             --project_name=Hybrid_Physics_GNN \
             --training_parameters_path=training_config/cylinder.json \
-            --num_epochs=10 \
-            --init_lr=0.001 \
-            --batch_size=8 \
-            --warmup=500 \
-            --num_workers=2 \
-            --prefetch_factor=2 \
+            --model_save_name=NS_onetraj \
+            --model_path=checkpoints/NS_onetraj.ckpt \
+            --resume_training \
+            --num_epochs=300 \
+            --init_lr=0.0001 \
+            --batch_size=1 \
+            --warmup=400 \
+            --num_workers=0 \
+            --prefetch_factor=0 \
             --nb_iterations=1 \
